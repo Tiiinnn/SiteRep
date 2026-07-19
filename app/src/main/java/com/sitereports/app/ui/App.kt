@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Home
@@ -36,11 +41,10 @@ import com.sitereports.app.data.UnitRepository
 private object Routes {
     const val Units = "units"
     const val Reports = "reports"
-    const val EditUnit = "unit/{unitId}"
+    const val AddUnit = "unit/add"
     const val NewReport = "report/new/{unitId}"
     const val ReportDetails = "report/{reportId}"
 
-    fun editUnit(id: Long) = "unit/$id"
     fun newReport(id: Long) = "report/new/$id"
     fun reportDetails(id: Long) = "report/$id"
 }
@@ -101,13 +105,30 @@ fun SiteReportsApp(
                 .windowInsetsPadding(
                     WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 ),
+            enterTransition = {
+                val switchingTabs = initialState.destination.route in setOf(Routes.Units, Routes.Reports) &&
+                    targetState.destination.route in setOf(Routes.Units, Routes.Reports)
+                if (switchingTabs) fadeIn(tween(160))
+                else fadeIn(tween(180)) + slideInHorizontally(tween(220)) { it / 12 }
+            },
+            exitTransition = {
+                val switchingTabs = initialState.destination.route in setOf(Routes.Units, Routes.Reports) &&
+                    targetState.destination.route in setOf(Routes.Units, Routes.Reports)
+                if (switchingTabs) fadeOut(tween(160))
+                else fadeOut(tween(160)) + slideOutHorizontally(tween(220)) { -it / 12 }
+            },
+            popEnterTransition = {
+                fadeIn(tween(160)) + slideInHorizontally(tween(180)) { -it / 12 }
+            },
+            popExitTransition = {
+                fadeOut(tween(140)) + slideOutHorizontally(tween(180)) { it / 12 }
+            },
         ) {
             composable(Routes.Units) {
                 UnitsScreen(
                     repository = unitRepository,
-                    onAdd = { navController.navigate(Routes.editUnit(0)) },
-                    onEdit = { navController.navigate(Routes.editUnit(it)) },
-                    onCreateReport = { navController.navigate(Routes.newReport(it)) },
+                    onAdd = { navController.navigate(Routes.AddUnit) },
+                    onOpenUnit = { navController.navigate(Routes.newReport(it)) },
                 )
             }
             composable(Routes.Reports) {
@@ -116,14 +137,15 @@ fun SiteReportsApp(
                     onOpenReport = { navController.navigate(Routes.reportDetails(it)) },
                 )
             }
-            composable(
-                route = Routes.EditUnit,
-                arguments = listOf(navArgument("unitId") { type = NavType.LongType }),
-            ) { entry ->
-                EditUnitScreen(
-                    unitId = entry.arguments?.getLong("unitId") ?: 0,
+            composable(Routes.AddUnit) {
+                AddUnitScreen(
                     repository = unitRepository,
-                    onClose = { navController.popBackStack() },
+                    onCancel = { navController.popBackStack() },
+                    onCreated = { unitId ->
+                        navController.navigate(Routes.newReport(unitId)) {
+                            popUpTo(Routes.AddUnit) { inclusive = true }
+                        }
+                    },
                 )
             }
             composable(

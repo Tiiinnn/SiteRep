@@ -13,17 +13,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -37,7 +36,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,38 +59,18 @@ import kotlinx.coroutines.launch
 fun UnitsScreen(
     repository: UnitRepository,
     onAdd: () -> Unit,
-    onEdit: (Long) -> Unit,
-    onCreateReport: (Long) -> Unit,
+    onOpenUnit: (Long) -> Unit,
 ) {
     val viewModel: UnitsViewModel = viewModel(factory = UnitsViewModelFactory(repository))
     val units by viewModel.units.collectAsStateWithLifecycle()
-    var managing by rememberSaveable { mutableStateOf(false) }
-    var selected by rememberSaveable { mutableStateOf(emptySet<Long>()) }
-    var confirmDelete by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<SiteUnit?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             ScreenHeader(
                 title = "My Units",
-                action = if (units.isNotEmpty()) {
-                    {
-                        OutlinedButton(onClick = {
-                            managing = !managing
-                            selected = emptySet()
-                        }) { Text(if (managing) "Cancel" else "Manage Units") }
-                    }
-                } else null,
+                action = { AboutSiteRepAction() },
             )
-            if (managing) {
-                Button(
-                    onClick = { confirmDelete = true },
-                    enabled = selected.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = MaterialTheme.shapes.extraSmall,
-                ) {
-                    Text("Delete Selected (${selected.size})")
-                }
-            }
             if (units.isEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -128,19 +106,14 @@ fun UnitsScreen(
                     items(units, key = SiteUnit::id) { unit ->
                         UnitCard(
                             unit = unit,
-                            managing = managing,
-                            selected = unit.id in selected,
-                            onSelected = { checked ->
-                                selected = if (checked) selected + unit.id else selected - unit.id
-                            },
-                            onEdit = { onEdit(unit.id) },
-                            onCreateReport = { onCreateReport(unit.id) },
+                            onOpen = { onOpenUnit(unit.id) },
+                            onDelete = { pendingDelete = unit },
                         )
                     }
                 }
             }
         }
-        if (!managing && units.isNotEmpty()) {
+        if (units.isNotEmpty()) {
             FloatingActionButton(
                 onClick = onAdd,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
@@ -150,20 +123,18 @@ fun UnitsScreen(
         }
     }
 
-    if (confirmDelete) {
+    pendingDelete?.let { unit ->
         AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete selected units?") },
-            text = { Text("Saved report history will remain available.") },
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete ${unit.blockLot}?") },
+            text = { Text("This removes the unit from My Units. Saved report history will remain available.") },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.delete(selected)
-                    selected = emptySet()
-                    managing = false
-                    confirmDelete = false
+                    viewModel.delete(setOf(unit.id))
+                    pendingDelete = null
                 }) { Text("Delete") }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
         )
     }
 }
@@ -171,36 +142,24 @@ fun UnitsScreen(
 @Composable
 private fun UnitCard(
     unit: SiteUnit,
-    managing: Boolean,
-    selected: Boolean,
-    onSelected: (Boolean) -> Unit,
-    onEdit: () -> Unit,
-    onCreateReport: () -> Unit,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (managing) {
-                Checkbox(checked = selected, onCheckedChange = onSelected)
-                Spacer(Modifier.size(8.dp))
-            }
             Column(Modifier.weight(1f)) {
                 Text(unit.blockLot.uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
                 Text(unit.project, style = MaterialTheme.typography.bodyLarge)
                 Text(unit.location, color = MaterialTheme.colorScheme.secondary)
             }
-            if (!managing) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Outlined.Edit, contentDescription = "Edit ${unit.blockLot}")
-                }
-                IconButton(onClick = onCreateReport) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowForwardIos, contentDescription = "Create report for ${unit.blockLot}")
-                }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete ${unit.blockLot}")
             }
         }
     }
@@ -208,28 +167,16 @@ private fun UnitCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditUnitScreen(
-    unitId: Long,
+fun AddUnitScreen(
     repository: UnitRepository,
-    onClose: () -> Unit,
+    onCancel: () -> Unit,
+    onCreated: (Long) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var blockLot by rememberSaveable { mutableStateOf("") }
     var project by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var attemptedSave by rememberSaveable { mutableStateOf(false) }
-    var loaded by remember { mutableStateOf(unitId == 0L) }
-
-    LaunchedEffect(unitId) {
-        if (unitId != 0L) {
-            repository.get(unitId)?.let {
-                blockLot = it.blockLot
-                project = it.project
-                location = it.location
-            }
-            loaded = true
-        }
-    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -239,9 +186,9 @@ fun EditUnitScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Cancel") }
+                    IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Cancel") }
                     Text(
-                        if (unitId == 0L) "ADD NEW UNIT" else "EDIT UNIT",
+                        "ADD NEW UNIT",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
                     )
@@ -250,8 +197,7 @@ fun EditUnitScreen(
             }
         },
     ) { padding ->
-        if (loaded) {
-            Column(
+        Column(
                 modifier = Modifier.fillMaxSize().padding(padding).imePadding().padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
@@ -288,28 +234,26 @@ fun EditUnitScreen(
                 )
                 Spacer(Modifier.weight(1f))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
                     Button(
                         onClick = {
                             attemptedSave = true
                             if (blockLot.isNotBlank() && project.isNotBlank() && location.isNotBlank()) {
                                 scope.launch {
-                                    repository.save(
+                                    val newUnitId = repository.save(
                                         SiteUnit(
-                                            id = unitId,
                                             blockLot = blockLot.trim(),
                                             project = project.trim(),
                                             location = location.trim(),
                                         ),
                                     )
-                                    onClose()
+                                    onCreated(newUnitId)
                                 }
                             }
                         },
                         modifier = Modifier.weight(1f),
-                    ) { Text(if (unitId == 0L) "Add" else "Update") }
+                    ) { Text("Add") }
                 }
             }
-        }
     }
 }

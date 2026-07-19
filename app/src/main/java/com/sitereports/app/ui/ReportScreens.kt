@@ -31,8 +31,10 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,6 +45,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,6 +87,9 @@ fun ReportFormScreen(
         factory = ReportFormViewModelFactory(unitId, unitRepository, reportRepository),
     )
     val draft by viewModel.draft.collectAsStateWithLifecycle()
+    val validationErrors by viewModel.validationErrors.collectAsStateWithLifecycle()
+    val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
+    val saveError by viewModel.saveError.collectAsStateWithLifecycle()
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -107,15 +113,24 @@ fun ReportFormScreen(
             )
         },
         bottomBar = {
-            Button(
-                onClick = viewModel::generateAndSave,
-                enabled = draft != null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                shape = MaterialTheme.shapes.extraSmall,
-            ) { Text("GENERATE & COPY REPORT", fontWeight = FontWeight.Bold) }
+            Column(Modifier.fillMaxWidth().imePadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                saveError?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+                Button(
+                    onClick = viewModel::generateAndSave,
+                    enabled = draft != null && !isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraSmall,
+                ) {
+                    Text(if (isSubmitting) "SAVING..." else "GENERATE & COPY REPORT", fontWeight = FontWeight.Bold)
+                }
+            }
         },
     ) { padding ->
         val current = draft
@@ -126,6 +141,7 @@ fun ReportFormScreen(
         } else {
             ReportForm(
                 draft = current,
+                validationErrors = validationErrors,
                 onUpdate = viewModel::update,
                 modifier = Modifier.padding(padding),
             )
@@ -136,6 +152,7 @@ fun ReportFormScreen(
 @Composable
 private fun ReportForm(
     draft: ReportDraft,
+    validationErrors: Set<UnitField>,
     onUpdate: ((ReportDraft) -> ReportDraft) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -145,9 +162,33 @@ private fun ReportForm(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ExpandableSection("Unit Information") {
-            InfoLine("Block/Lot", draft.blockLot)
-            InfoLine("Project", draft.project)
-            InfoLine("Location", draft.location)
+            OutlinedTextField(
+                value = draft.blockLot,
+                onValueChange = { value -> onUpdate { it.copy(blockLot = value) } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Block/Lot") },
+                isError = UnitField.BlockLot in validationErrors,
+                supportingText = if (UnitField.BlockLot in validationErrors) ({ Text("Required") }) else null,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = draft.project,
+                onValueChange = { value -> onUpdate { it.copy(project = value) } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Project") },
+                isError = UnitField.Project in validationErrors,
+                supportingText = if (UnitField.Project in validationErrors) ({ Text("Required") }) else null,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = draft.location,
+                onValueChange = { value -> onUpdate { it.copy(location = value) } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Location") },
+                isError = UnitField.Location in validationErrors,
+                supportingText = if (UnitField.Location in validationErrors) ({ Text("Required") }) else null,
+                singleLine = true,
+            )
             OutlinedButton(
                 onClick = {
                     DatePickerDialog(
@@ -219,14 +260,6 @@ private fun ReportForm(
 }
 
 @Composable
-private fun InfoLine(label: String, value: String) {
-    Column {
-        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-        Text(value, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
-@Composable
 private fun ManpowerStepper(
     label: String,
     value: Int,
@@ -263,8 +296,9 @@ fun ReportsScreen(
 ) {
     val viewModel: ReportsViewModel = viewModel(factory = ReportsViewModelFactory(repository))
     val reports by viewModel.reports.collectAsStateWithLifecycle()
+    var pendingDelete by remember { mutableStateOf<DailyReport?>(null) }
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader("My Reports")
+        ScreenHeader("My Reports", action = { AboutSiteRepAction() })
         if (reports.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                 Text("No reports yet. Open a unit and create its first daily report.")
@@ -290,16 +324,39 @@ fun ReportsScreen(
                             modifier = Modifier.fillMaxWidth().clickable { onOpenReport(report.id) },
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         ) {
-                            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                Text(report.blockLot.uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
-                                Text(report.project)
-                                Text(report.location, color = MaterialTheme.colorScheme.secondary)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(report.blockLot.uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                                    Text(report.project)
+                                    Text(report.location, color = MaterialTheme.colorScheme.secondary)
+                                }
+                                IconButton(onClick = { pendingDelete = report }) {
+                                    Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete report for ${report.blockLot}")
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    pendingDelete?.let { report ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete this report?") },
+            text = { Text("Delete the ${report.date.format(displayDateFormatter)} report for ${report.blockLot}? This cannot be undone.") },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.delete(report.id)
+                    pendingDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
     }
 }
 

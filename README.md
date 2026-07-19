@@ -1,4 +1,4 @@
-# Daily Site Reports for Android
+# SiteRep for Android
 
 A native, offline-first Android application for managing construction units and producing clipboard-ready daily site reports.
 
