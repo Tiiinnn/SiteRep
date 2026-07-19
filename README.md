@@ -42,3 +42,7 @@ SiteRep keystore details, then run:
 
 Keep the release keystore and passwords in secure backups. The same signing key
 is required for every future SiteRep update.
+
+## Purpose
+
+The purpose of this app is for the developer's friend and not meant for distribution unless ditributed by the App owner.
