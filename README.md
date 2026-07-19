@@ -29,3 +29,16 @@ Open the directory in Android Studio and allow Gradle sync to complete, or run:
 ```
 
 The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
+
+## Production release
+
+Release builds use R8 code optimization, obfuscation, and resource shrinking. Copy
+`keystore.properties.example` to `keystore.properties`, provide the permanent
+SiteRep keystore details, then run:
+
+```powershell
+.\gradlew.bat testDebugUnitTest lintRelease assembleRelease
+```
+
+Keep the release keystore and passwords in secure backups. The same signing key
+is required for every future SiteRep update.

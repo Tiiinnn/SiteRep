@@ -368,7 +368,17 @@ fun ReportDetailsScreen(
 ) {
     val context = LocalContext.current
     var report by remember { mutableStateOf<DailyReport?>(null) }
-    LaunchedEffect(reportId) { report = repository.get(reportId) }
+    var isLoading by remember { mutableStateOf(true) }
+    LaunchedEffect(reportId) {
+        isLoading = true
+        report = try {
+            repository.get(reportId)
+        } catch (_: Exception) {
+            null
+        } finally {
+            isLoading = false
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -388,9 +398,23 @@ fun ReportDetailsScreen(
         },
     ) { padding ->
         val current = report
-        if (current == null) {
+        if (isLoading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
+            }
+        } else if (current == null) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("Report not found", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "It may have been deleted or is no longer available.",
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
+                )
+                Button(onClick = onBack) { Text("Back to reports") }
             }
         } else {
             OutlinedCard(
