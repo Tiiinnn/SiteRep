@@ -49,6 +49,8 @@ private object Routes {
     fun reportDetails(id: Long) = "report/$id"
 }
 
+private val TopLevelRoutes = setOf(Routes.Units, Routes.Reports)
+
 @Composable
 fun SiteReportsApp(
     unitRepository: UnitRepository,
@@ -106,14 +108,14 @@ fun SiteReportsApp(
                     WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 ),
             enterTransition = {
-                val switchingTabs = initialState.destination.route in setOf(Routes.Units, Routes.Reports) &&
-                    targetState.destination.route in setOf(Routes.Units, Routes.Reports)
+                val switchingTabs = initialState.destination.route in TopLevelRoutes &&
+                    targetState.destination.route in TopLevelRoutes
                 if (switchingTabs) fadeIn(tween(160))
                 else fadeIn(tween(180)) + slideInHorizontally(tween(220)) { it / 12 }
             },
             exitTransition = {
-                val switchingTabs = initialState.destination.route in setOf(Routes.Units, Routes.Reports) &&
-                    targetState.destination.route in setOf(Routes.Units, Routes.Reports)
+                val switchingTabs = initialState.destination.route in TopLevelRoutes &&
+                    targetState.destination.route in TopLevelRoutes
                 if (switchingTabs) fadeOut(tween(160))
                 else fadeOut(tween(160)) + slideOutHorizontally(tween(220)) { -it / 12 }
             },

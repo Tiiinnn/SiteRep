@@ -76,7 +76,7 @@ interface ReportDao {
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [UnitEntity::class, ReportEntity::class], version = 1, exportSchema = false)
+@Database(entities = [UnitEntity::class, ReportEntity::class], version = 1, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun unitDao(): UnitDao
     abstract fun reportDao(): ReportDao

@@ -177,6 +177,8 @@ fun AddUnitScreen(
     var project by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var attemptedSave by rememberSaveable { mutableStateOf(false) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
+    var saveError by rememberSaveable { mutableStateOf<String?>(null) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -203,7 +205,7 @@ fun AddUnitScreen(
             ) {
                 OutlinedTextField(
                     value = blockLot,
-                    onValueChange = { blockLot = it },
+                    onValueChange = { blockLot = it; saveError = null },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Block/Lot") },
                     placeholder = { Text("e.g., B25L08") },
@@ -214,7 +216,7 @@ fun AddUnitScreen(
                 )
                 OutlinedTextField(
                     value = project,
-                    onValueChange = { project = it },
+                    onValueChange = { project = it; saveError = null },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Project") },
                     isError = attemptedSave && project.isBlank(),
@@ -224,7 +226,7 @@ fun AddUnitScreen(
                 )
                 OutlinedTextField(
                     value = location,
-                    onValueChange = { location = it },
+                    onValueChange = { location = it; saveError = null },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Location") },
                     isError = attemptedSave && location.isBlank(),
@@ -232,27 +234,40 @@ fun AddUnitScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     singleLine = true,
                 )
+                saveError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
                 Spacer(Modifier.weight(1f))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                    OutlinedButton(onClick = onCancel, enabled = !isSaving, modifier = Modifier.weight(1f)) { Text("Cancel") }
                     Button(
                         onClick = {
+                            if (isSaving) return@Button
                             attemptedSave = true
                             if (blockLot.isNotBlank() && project.isNotBlank() && location.isNotBlank()) {
+                                isSaving = true
+                                saveError = null
                                 scope.launch {
-                                    val newUnitId = repository.save(
-                                        SiteUnit(
-                                            blockLot = blockLot.trim(),
-                                            project = project.trim(),
-                                            location = location.trim(),
-                                        ),
-                                    )
-                                    onCreated(newUnitId)
+                                    try {
+                                        val newUnitId = repository.save(
+                                            SiteUnit(
+                                                blockLot = blockLot.trim(),
+                                                project = project.trim(),
+                                                location = location.trim(),
+                                            ),
+                                        )
+                                        onCreated(newUnitId)
+                                    } catch (_: Exception) {
+                                        saveError = "Could not add the unit. Please try again."
+                                    } finally {
+                                        isSaving = false
+                                    }
                                 }
                             }
                         },
+                        enabled = !isSaving,
                         modifier = Modifier.weight(1f),
-                    ) { Text("Add") }
+                    ) { Text(if (isSaving) "Adding..." else "Add") }
                 }
             }
     }
