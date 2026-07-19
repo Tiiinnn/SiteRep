@@ -71,6 +71,9 @@ interface ReportDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(report: ReportEntity): Long
+
+    @Query("DELETE FROM reports WHERE id = :id")
+    suspend fun delete(id: Long)
 }
 
 @Database(entities = [UnitEntity::class, ReportEntity::class], version = 1, exportSchema = false)
@@ -101,6 +104,8 @@ class ReportRepository(private val dao: ReportDao) {
     val reports: Flow<List<DailyReport>> = dao.observeAll().map { rows -> rows.map(ReportEntity::toDomain) }
 
     suspend fun get(id: Long): DailyReport? = dao.get(id)?.toDomain()
+
+    suspend fun delete(id: Long) = dao.delete(id)
 
     suspend fun save(draft: ReportDraft, generatedText: String): Long = dao.insert(
         ReportEntity(

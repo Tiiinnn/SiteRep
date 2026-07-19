@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.sitereports.app.BuildConfig
 
 @Composable
 fun ScreenHeader(
@@ -79,5 +84,44 @@ fun ExpandableSection(
                 content()
             }
         }
+    }
+}
+
+@Composable
+fun AboutSiteRepAction() {
+    var showAbout by rememberSaveable { mutableStateOf(false) }
+
+    IconButton(onClick = { showAbout = true }) {
+        Icon(Icons.Outlined.Info, contentDescription = "About SiteRep")
+    }
+
+    if (showAbout) {
+        AlertDialog(
+            onDismissRequest = { showAbout = false },
+            title = {
+                Column {
+                    Text("SiteRep", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("App Owner", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text("Juztinn Ceppillo")
+                    Text("Developer", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text("Justin Antenor")
+                    Text("SiteRep was created for Juztinn Ceppillo to make daily site reporting faster, clearer, and easier to manage.")
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(
+                        "Copyright \u00A9 2026 Juztinn Ceppillo. All rights reserved. SiteRep and its contents are intended for the owner's authorized site-reporting use. Unauthorized copying, distribution, or modification is prohibited.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAbout = false }) { Text("Close") }
+            },
+        )
     }
 }

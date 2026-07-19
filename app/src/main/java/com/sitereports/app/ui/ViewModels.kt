@@ -34,6 +34,8 @@ sealed interface ReportFormEvent {
     data class Saved(val reportId: Long, val text: String) : ReportFormEvent
 }
 
+enum class UnitField { BlockLot, Project, Location }
+
 class ReportFormViewModel(
     unitId: Long,
     private val unitRepository: UnitRepository,
@@ -44,6 +46,15 @@ class ReportFormViewModel(
 
     private val _events = MutableSharedFlow<ReportFormEvent>()
     val events = _events.asSharedFlow()
+
+    private val _validationErrors = MutableStateFlow<Set<UnitField>>(emptySet())
+    val validationErrors: StateFlow<Set<UnitField>> = _validationErrors
+
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting
+
+    private val _saveError = MutableStateFlow<String?>(null)
+    val saveError: StateFlow<String?> = _saveError
 
     init {
         viewModelScope.launch {
@@ -60,14 +71,55 @@ class ReportFormViewModel(
 
     fun update(transform: (ReportDraft) -> ReportDraft) {
         _draft.value = _draft.value?.let(transform)
+        _saveError.value = null
+        _draft.value?.let { current ->
+            _validationErrors.value = _validationErrors.value.filterTo(mutableSetOf()) { field ->
+                when (field) {
+                    UnitField.BlockLot -> current.blockLot.isBlank()
+                    UnitField.Project -> current.project.isBlank()
+                    UnitField.Location -> current.location.isBlank()
+                }
+            }
+        }
     }
 
     fun generateAndSave() {
+        if (_isSubmitting.value) return
         val current = _draft.value ?: return
-        val text = ReportFormatter.format(current)
+        val errors = buildSet {
+            if (current.blockLot.isBlank()) add(UnitField.BlockLot)
+            if (current.project.isBlank()) add(UnitField.Project)
+            if (current.location.isBlank()) add(UnitField.Location)
+        }
+        _validationErrors.value = errors
+        if (errors.isNotEmpty()) return
+
+        val normalized = current.copy(
+            blockLot = current.blockLot.trim(),
+            project = current.project.trim(),
+            location = current.location.trim(),
+        )
+        _isSubmitting.value = true
         viewModelScope.launch {
-            val reportId = reportRepository.save(current, text)
-            _events.emit(ReportFormEvent.Saved(reportId, text))
+            _saveError.value = null
+            try {
+                unitRepository.save(
+                    Unit(
+                        id = normalized.unitId,
+                        blockLot = normalized.blockLot,
+                        project = normalized.project,
+                        location = normalized.location,
+                    ),
+                )
+                val text = ReportFormatter.format(normalized)
+                val reportId = reportRepository.save(normalized, text)
+                _draft.value = normalized
+                _events.emit(ReportFormEvent.Saved(reportId, text))
+            } catch (_: Exception) {
+                _saveError.value = "Could not save the unit and report. Please try again."
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 }
@@ -78,6 +130,10 @@ class ReportsViewModel(private val repository: ReportRepository) : ViewModel() {
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList(),
     )
+
+    fun delete(reportId: Long) {
+        viewModelScope.launch { repository.delete(reportId) }
+    }
 }
 
 class UnitsViewModelFactory(private val repository: UnitRepository) : ViewModelProvider.Factory {
