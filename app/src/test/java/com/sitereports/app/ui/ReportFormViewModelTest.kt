@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.time.LocalDate
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -68,6 +69,45 @@ class ReportFormViewModelTest {
         assertTrue(UnitField.Project in viewModel.validationErrors.value)
         assertEquals(0, reportDao.insertCount)
     }
+
+    @Test
+    fun editingReportUpdatesItsSnapshotWithoutChangingUnit() = runTest(dispatcher) {
+        val unitDao = FakeUnitDao(UnitEntity(1, "UNIT", "Unit Project", "Unit Location"))
+        val reportDao = FakeReportDao(
+            ReportEntity(
+                id = 7,
+                unitId = 1,
+                reportDateEpochDay = LocalDate.of(2026, 7, 19).toEpochDay(),
+                blockLot = "B01",
+                project = "Saved Project",
+                location = "Saved Location",
+                weather = "Sunny",
+                skilledWorkers = 1,
+                unskilledWorkers = 0,
+                painters = 0,
+                electricians = 0,
+                plumbers = 0,
+                foreman = 0,
+                activities = "Initial work",
+                remarks = "Initial remarks",
+                generatedText = "old",
+                createdAt = 1234,
+            ),
+        )
+        val viewModel = ReportFormViewModel(1, UnitRepository(unitDao), ReportRepository(reportDao), reportId = 7)
+        advanceUntilIdle()
+
+        viewModel.update { it.copy(project = "Revised Project", weather = "Rainy") }
+        viewModel.generateAndSave()
+        advanceUntilIdle()
+
+        assertEquals(0, reportDao.insertCount)
+        assertEquals(1, reportDao.updateCount)
+        assertEquals("Revised Project", reportDao.current?.project)
+        assertEquals("Rainy", reportDao.current?.weather)
+        assertEquals(1234L, reportDao.current?.createdAt)
+        assertEquals("Unit Project", unitDao.current.project)
+    }
 }
 
 private class FakeUnitDao(initial: UnitEntity) : UnitDao {
@@ -85,9 +125,11 @@ private class FakeUnitDao(initial: UnitEntity) : UnitDao {
     }
 }
 
-private class FakeReportDao : ReportDao {
-    private val state = MutableStateFlow<List<ReportEntity>>(emptyList())
+private class FakeReportDao(initial: ReportEntity? = null) : ReportDao {
+    private val state = MutableStateFlow(initial?.let(::listOf) ?: emptyList())
     var insertCount = 0
+        private set
+    var updateCount = 0
         private set
     val current: ReportEntity? get() = state.value.singleOrNull()
 
@@ -98,6 +140,15 @@ private class FakeReportDao : ReportDao {
         val saved = report.copy(id = insertCount.toLong())
         state.value = state.value + saved
         return saved.id
+    }
+    override suspend fun update(report: ReportEntity): Int {
+        val existing = state.value.any { it.id == report.id }
+        if (existing) {
+            updateCount += 1
+            state.value = state.value.map { if (it.id == report.id) report else it }
+            return 1
+        }
+        return 0
     }
     override suspend fun delete(id: Long) {
         state.value = state.value.filterNot { it.id == id }

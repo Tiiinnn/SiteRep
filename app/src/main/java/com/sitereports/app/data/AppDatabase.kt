@@ -9,6 +9,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Update
 import androidx.room.Upsert
 import com.sitereports.app.domain.DailyReport
 import com.sitereports.app.domain.ReportDraft
@@ -72,6 +73,9 @@ interface ReportDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(report: ReportEntity): Long
 
+    @Update
+    suspend fun update(report: ReportEntity): Int
+
     @Query("DELETE FROM reports WHERE id = :id")
     suspend fun delete(id: Long)
 }
@@ -108,29 +112,45 @@ class ReportRepository(private val dao: ReportDao) {
     suspend fun delete(id: Long) = dao.delete(id)
 
     suspend fun save(draft: ReportDraft, generatedText: String): Long = dao.insert(
-        ReportEntity(
-            unitId = draft.unitId,
-            reportDateEpochDay = draft.date.toEpochDay(),
-            blockLot = draft.blockLot,
-            project = draft.project,
-            location = draft.location,
-            weather = draft.weather,
-            skilledWorkers = draft.skilledWorkers,
-            unskilledWorkers = draft.unskilledWorkers,
-            painters = draft.painters,
-            electricians = draft.electricians,
-            plumbers = draft.plumbers,
-            foreman = draft.foreman,
-            activities = draft.activities,
-            remarks = draft.remarks,
-            generatedText = generatedText,
-            createdAt = System.currentTimeMillis(),
-        ),
+        draft.toReportEntity(generatedText = generatedText, createdAt = System.currentTimeMillis()),
     )
+
+    suspend fun update(
+        reportId: Long,
+        draft: ReportDraft,
+        generatedText: String,
+        createdAt: Long,
+    ): Boolean = dao.update(
+        draft.toReportEntity(id = reportId, generatedText = generatedText, createdAt = createdAt),
+    ) == 1
 }
 
 private fun UnitEntity.toDomain() = Unit(id, blockLot, project, location)
 private fun Unit.toEntity() = UnitEntity(id, blockLot, project, location)
+
+private fun ReportDraft.toReportEntity(
+    id: Long = 0,
+    generatedText: String,
+    createdAt: Long,
+) = ReportEntity(
+    id = id,
+    unitId = unitId,
+    reportDateEpochDay = date.toEpochDay(),
+    blockLot = blockLot,
+    project = project,
+    location = location,
+    weather = weather,
+    skilledWorkers = skilledWorkers,
+    unskilledWorkers = unskilledWorkers,
+    painters = painters,
+    electricians = electricians,
+    plumbers = plumbers,
+    foreman = foreman,
+    activities = activities,
+    remarks = remarks,
+    generatedText = generatedText,
+    createdAt = createdAt,
+)
 
 private fun ReportEntity.toDomain() = DailyReport(
     id = id,

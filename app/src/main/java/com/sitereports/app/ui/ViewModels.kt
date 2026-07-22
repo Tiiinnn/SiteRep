@@ -37,9 +37,10 @@ sealed interface ReportFormEvent {
 enum class UnitField { BlockLot, Project, Location }
 
 class ReportFormViewModel(
-    unitId: Long,
+    private val unitId: Long?,
     private val unitRepository: UnitRepository,
     private val reportRepository: ReportRepository,
+    private val reportId: Long? = null,
 ) : ViewModel() {
     private val _draft = MutableStateFlow<ReportDraft?>(null)
     val draft: StateFlow<ReportDraft?> = _draft
@@ -56,15 +57,36 @@ class ReportFormViewModel(
     private val _saveError = MutableStateFlow<String?>(null)
     val saveError: StateFlow<String?> = _saveError
 
+    private var reportCreatedAt: Long? = null
+
     init {
         viewModelScope.launch {
-            unitRepository.get(unitId)?.let { unit ->
-                _draft.value = ReportDraft(
-                    unitId = unit.id,
-                    blockLot = unit.blockLot,
-                    project = unit.project,
-                    location = unit.location,
-                )
+            if (reportId != null) {
+                reportRepository.get(reportId)?.let { report ->
+                    reportCreatedAt = report.createdAt
+                    _draft.value = ReportDraft(
+                        unitId = report.unitId,
+                        date = report.date,
+                        blockLot = report.blockLot,
+                        project = report.project,
+                        location = report.location,
+                        weather = report.weather,
+                        skilledWorkers = report.skilledWorkers,
+                        unskilledWorkers = report.unskilledWorkers,
+                        painters = report.painters,
+                        electricians = report.electricians,
+                        plumbers = report.plumbers,
+                        foreman = report.foreman,
+                        activities = report.activities,
+                        remarks = report.remarks,
+                    )
+                } ?: run {
+                    _saveError.value = "This report is no longer available."
+                }
+            } else {
+                unitId?.let { id -> unitRepository.get(id) }?.let { unit ->
+                    _draft.value = ReportDraft(unit.id, blockLot = unit.blockLot, project = unit.project, location = unit.location)
+                }
             }
         }
     }
@@ -103,20 +125,35 @@ class ReportFormViewModel(
         viewModelScope.launch {
             _saveError.value = null
             try {
-                unitRepository.save(
-                    Unit(
-                        id = normalized.unitId,
-                        blockLot = normalized.blockLot,
-                        project = normalized.project,
-                        location = normalized.location,
-                    ),
-                )
                 val text = ReportFormatter.format(normalized)
-                val reportId = reportRepository.save(normalized, text)
+                val savedReportId = if (reportId == null) {
+                    unitRepository.save(
+                        Unit(
+                            id = normalized.unitId,
+                            blockLot = normalized.blockLot,
+                            project = normalized.project,
+                            location = normalized.location,
+                        ),
+                    )
+                    reportRepository.save(normalized, text)
+                } else {
+                    val updated = reportRepository.update(
+                        reportId = reportId,
+                        draft = normalized,
+                        generatedText = text,
+                        createdAt = reportCreatedAt ?: throw IllegalStateException("Missing report timestamp"),
+                    )
+                    if (!updated) throw IllegalStateException("Report was deleted")
+                    reportId
+                }
                 _draft.value = normalized
-                _events.emit(ReportFormEvent.Saved(reportId, text))
+                _events.emit(ReportFormEvent.Saved(savedReportId, text))
             } catch (_: Exception) {
-                _saveError.value = "Could not save the unit and report. Please try again."
+                _saveError.value = if (reportId == null) {
+                    "Could not save the unit and report. Please try again."
+                } else {
+                    "Could not update the report. Please try again."
+                }
             } finally {
                 _isSubmitting.value = false
             }
@@ -147,11 +184,12 @@ class ReportsViewModelFactory(private val repository: ReportRepository) : ViewMo
 }
 
 class ReportFormViewModelFactory(
-    private val unitId: Long,
+    private val unitId: Long?,
     private val unitRepository: UnitRepository,
     private val reportRepository: ReportRepository,
+    private val reportId: Long? = null,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        ReportFormViewModel(unitId, unitRepository, reportRepository) as T
+        ReportFormViewModel(unitId, unitRepository, reportRepository, reportId) as T
 }

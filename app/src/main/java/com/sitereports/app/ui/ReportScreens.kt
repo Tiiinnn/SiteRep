@@ -32,10 +32,13 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,14 +71,26 @@ import com.sitereports.app.domain.DailyReport
 import com.sitereports.app.domain.ReportDraft
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
+import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
 private val displayDateFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH)
+private val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+
+private enum class ReportPeriod { Daily, Weekly, Monthly }
+
+private data class ReportGroup(
+    val key: LocalDate,
+    val title: String,
+    val reports: List<DailyReport>,
+)
 
 @Composable
 fun ReportFormScreen(
-    unitId: Long,
+    unitId: Long? = null,
+    reportId: Long? = null,
     unitRepository: UnitRepository,
     reportRepository: ReportRepository,
     onBack: () -> Unit,
@@ -83,8 +98,8 @@ fun ReportFormScreen(
 ) {
     val context = LocalContext.current
     val viewModel: ReportFormViewModel = viewModel(
-        key = "new-report-$unitId",
-        factory = ReportFormViewModelFactory(unitId, unitRepository, reportRepository),
+        key = if (reportId == null) "new-report-$unitId" else "edit-report-$reportId",
+        factory = ReportFormViewModelFactory(unitId, unitRepository, reportRepository, reportId),
     )
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val validationErrors by viewModel.validationErrors.collectAsStateWithLifecycle()
@@ -128,7 +143,10 @@ fun ReportFormScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraSmall,
                 ) {
-                    Text(if (isSubmitting) "SAVING..." else "GENERATE & COPY REPORT", fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isSubmitting) "SAVING..." else if (reportId == null) "GENERATE & COPY REPORT" else "UPDATE & COPY REPORT",
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         },
@@ -297,6 +315,8 @@ fun ReportsScreen(
     val viewModel: ReportsViewModel = viewModel(factory = ReportsViewModelFactory(repository))
     val reports by viewModel.reports.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<DailyReport?>(null) }
+    var period by remember { mutableStateOf(ReportPeriod.Daily) }
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("My Reports", action = { AboutSiteRepAction() })
         if (reports.isEmpty()) {
@@ -304,22 +324,50 @@ fun ReportsScreen(
                 Text("No reports yet. Open a unit and create its first daily report.")
             }
         } else {
-            val grouped = reports.groupBy(DailyReport::date).toSortedMap(compareByDescending { it })
+            val grouped = remember(reports, period) { reports.groupFor(period) }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                grouped.forEach { (date, dateReports) ->
-                    item(key = "date-$date") {
-                        Text(
-                            date.format(displayDateFormatter).uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
-                        )
+                item(key = "period-selector") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ReportPeriod.entries.forEach { option ->
+                            FilterChip(
+                                selected = period == option,
+                                onClick = { period = option },
+                                label = { Text(option.name.lowercase().replaceFirstChar(Char::uppercase)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.onSurface,
+                                    selectedLabelColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            )
+                        }
                     }
-                    items(dateReports, key = DailyReport::id) { report ->
+                }
+                grouped.forEach { group ->
+                    item(key = "group-${period.name}-${group.key}") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                group.title.uppercase(),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(
+                                onClick = {
+                                    context.copyReport(group.reports.compileText())
+                                    Toast.makeText(context, "${group.reports.size} report(s) copied to clipboard.", Toast.LENGTH_SHORT).show()
+                                },
+                            ) {
+                                Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy ${group.title} reports")
+                            }
+                        }
+                    }
+                    items(group.reports, key = DailyReport::id) { report ->
                         OutlinedCard(
                             modifier = Modifier.fillMaxWidth().clickable { onOpenReport(report.id) },
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
@@ -360,11 +408,35 @@ fun ReportsScreen(
     }
 }
 
+private fun List<DailyReport>.groupFor(period: ReportPeriod): List<ReportGroup> {
+    val groups = groupBy { report ->
+        when (period) {
+            ReportPeriod.Daily -> report.date
+            ReportPeriod.Weekly -> report.date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            ReportPeriod.Monthly -> report.date.withDayOfMonth(1)
+        }
+    }
+    return groups.entries
+        .sortedByDescending { it.key }
+        .map { (key, reports) ->
+            val title = when (period) {
+                ReportPeriod.Daily -> key.format(displayDateFormatter)
+                ReportPeriod.Weekly -> "Week of ${key.format(displayDateFormatter)} – ${key.plusDays(6).format(displayDateFormatter)}"
+                ReportPeriod.Monthly -> key.format(monthFormatter)
+            }
+            ReportGroup(key, title, reports)
+        }
+}
+
+private fun List<DailyReport>.compileText(): String =
+    joinToString(separator = "\n\n────────────────────────\n\n") { it.generatedText }
+
 @Composable
 fun ReportDetailsScreen(
     reportId: Long,
     repository: ReportRepository,
     onBack: () -> Unit,
+    onEdit: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     var report by remember { mutableStateOf<DailyReport?>(null) }
@@ -387,6 +459,9 @@ fun ReportDetailsScreen(
                 title = "Report Details",
                 onBack = onBack,
                 action = {
+                    IconButton(onClick = { report?.let { onEdit(it.id) } }) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "Edit report")
+                    }
                     IconButton(onClick = {
                         report?.let {
                             context.copyReport(it.generatedText)

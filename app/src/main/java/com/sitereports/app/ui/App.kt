@@ -43,9 +43,11 @@ private object Routes {
     const val Reports = "reports"
     const val AddUnit = "unit/add"
     const val NewReport = "report/new/{unitId}"
+    const val EditReport = "report/edit/{reportId}"
     const val ReportDetails = "report/{reportId}"
 
     fun newReport(id: Long) = "report/new/$id"
+    fun editReport(id: Long) = "report/edit/$id"
     fun reportDetails(id: Long) = "report/$id"
 }
 
@@ -167,6 +169,23 @@ fun SiteReportsApp(
                 )
             }
             composable(
+                route = Routes.EditReport,
+                arguments = listOf(navArgument("reportId") { type = NavType.LongType }),
+            ) { entry ->
+                ReportFormScreen(
+                    reportId = entry.arguments?.getLong("reportId") ?: return@composable,
+                    unitRepository = unitRepository,
+                    reportRepository = reportRepository,
+                    onBack = { navController.popBackStack() },
+                    onSaved = { savedReportId ->
+                        navController.navigate(Routes.reportDetails(savedReportId)) {
+                            // Replace the original details screen instead of leaving it below a new copy.
+                            popUpTo(Routes.ReportDetails) { inclusive = true }
+                        }
+                    },
+                )
+            }
+            composable(
                 route = Routes.ReportDetails,
                 arguments = listOf(navArgument("reportId") { type = NavType.LongType }),
             ) { entry ->
@@ -174,6 +193,7 @@ fun SiteReportsApp(
                     reportId = entry.arguments?.getLong("reportId") ?: return@composable,
                     repository = reportRepository,
                     onBack = { navController.popBackStack() },
+                    onEdit = { navController.navigate(Routes.editReport(it)) },
                 )
             }
         }
