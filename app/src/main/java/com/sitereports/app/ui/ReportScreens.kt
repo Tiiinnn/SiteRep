@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -60,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -128,7 +126,7 @@ fun ReportFormScreen(
             )
         },
         bottomBar = {
-            Column(Modifier.fillMaxWidth().imePadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                 saveError?.let {
                     Text(
                         it,
@@ -500,7 +498,7 @@ fun ReportDetailsScreen(
                     Text(
                         text = current.generatedText,
                         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-                        style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif),
+                        style = MaterialTheme.typography.bodyLarge,
                     )
                 }
             }

@@ -2,11 +2,7 @@ package com.sitereports.app.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -104,11 +100,7 @@ fun SiteReportsApp(
         NavHost(
             navController = navController,
             startDestination = Routes.Units,
-            modifier = Modifier
-                .padding(outerPadding)
-                .windowInsetsPadding(
-                    WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-                ),
+            modifier = Modifier.padding(outerPadding),
             enterTransition = {
                 val switchingTabs = initialState.destination.route in TopLevelRoutes &&
                     targetState.destination.route in TopLevelRoutes

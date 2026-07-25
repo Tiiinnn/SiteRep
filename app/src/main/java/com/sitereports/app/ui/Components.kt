@@ -107,13 +107,13 @@ fun AboutSiteRepAction() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("App Owner", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                    Text("Juztinn Ceppillo")
+                    Text("Juztinn Cepillo")
                     Text("Developer", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Text("Justin Antenor")
-                    Text("SiteRep was created for Juztinn Ceppillo to make daily site reporting faster, clearer, and easier to manage.")
+                    Text("SiteRep was created for Juztinn Cepillo to make daily site reporting faster, clearer, and easier to manage.")
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text(
-                        "Copyright \u00A9 2026 Juztinn Ceppillo. All rights reserved. SiteRep and its contents are intended for the owner's authorized site-reporting use. Unauthorized copying, distribution, or modification is prohibited.",
+                        "Copyright \u00A9 2026 Juztinn Cepillo. All rights reserved. SiteRep and its contents are intended for the owner's authorized site-reporting use. Unauthorized copying, distribution, or modification is prohibited.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary,
                     )
